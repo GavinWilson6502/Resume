@@ -1,0 +1,12 @@
+Mirroring: Horizontal
+Battery: Not present
+Trainer: Not present
+Mapper: 0
+Console type: NES
+PRG-RAM: 0
+PRG-NVRAM: 0
+CHR-RAM: 0
+CHR-NVRAM: 0
+Timing: NTSC
+Miscellaneous ROMs: 0
+Default expansion device:

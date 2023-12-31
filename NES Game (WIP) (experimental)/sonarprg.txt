@@ -1,0 +1,678 @@
+;TODO: find and replace things in curly braces (if there are any)
+;Don't use system palette entry $0D!
+;Avoid writing to palette memory!
+;After accessing palette memory, ensure PPUADDR is set to $3F00, $3F10, or any mirror thereof before it is set to
+; any address outside palette memory!
+;Read $2002 (PPUSTATUS) to reset VRAM address latch before writing to $2005 (PPUSCROLL) or $2006 (PPUADDR) if it's
+; possible that an incomplete write to $2005 or $2006 occurred previously, or in other similar circumstances!
+;Fully set scroll (write to both $2005 (PPUSCROLL) and b0-1 of $2000 (PPUCTRL)) before rendering after writing to
+; $2006 (PPUADDR) or accessing $2007 (PPUDATA)!
+;Remember that $2007 (PPUDATA) is read through a buffer (except possibly when accessing palette memory)! The first
+; time you read $2007 after any write that changes PPUADDR, discard the stale buffer data and read $2007 again to
+; access the desired data! Afterwards, ensure PPUADDR is correct for any further VRAM access!
+;Remember, 6502 architecture is LITTLE ENDIAN!
+;In 1 CPU cycle, 3 pixels can be drawn.
+
+
+;constant definitions
+	PPUCTRL_B = $FF	;PPU control register buffer zero-page address
+	PPUMASK_B = $FE	;PPU mask register buffer zero-page address
+	SCROLL_X = $FD	;x scroll buffer zero-page address
+	SCROLL_Y = $FC	;y scroll buffer zero-page address
+	IBR = $FB	;input buffer register zero-page address
+	PIR = $FA	;previous input register zero-page address
+	ATR = $F9	;animation timer register zero-page address
+	PL_X = $F8	;player x position (top left corner of center 8x8)
+	PL_Y = $F7	;player y position (top left corner of center 8x8) (includes 1-pixel offset)
+	
+	SPR_PG = $02		;sprite buffer page number
+	SPR_ADDR = $0200	;sprite buffer first address
+	
+	SPR_INIT = $C000	;sprite buffer initial data ROM address
+	
+	PL_SPD = $01	;player speed (pixels/frame)
+	
+	;tile numbers
+	;0 is reserved for a blank transparent tile pattern
+	RED_CH = $01	;red tile
+	GRN_CH = $02	;green tile
+	BLU_CH = $03	;blue tile
+	;sprite numbers
+	;0 is reserved for a blank transparent sprite pattern
+	SPZ_CH = $01	;sprite 0
+	PL_CH1 = $02	;player side sail
+	PL_CH2 = $03	;player side prop top 1
+	PL_CH3 = $04	;player side prop top 2
+	PL_CH4 = $05	;player side prop top 3
+	PL_CH5 = $06	;player side prop top 4
+	PL_CH6 = $07	;player side prop bottom 1
+	PL_CH7 = $08	;player side prop bottom 2
+	PL_CH8 = $09	;player side prop bottom 3
+	PL_CH9 = $0A	;player side prop bottom 4
+	PL_CH10 = $0B	;player side stern
+	PL_CH11 = $0C	;player side mid
+	PL_CH12 = $0D	;player side bow
+	PL_CH13 = $0E	;player up prop port 1
+	PL_CH14 = $0F	;player up prop port 2
+	PL_CH15 = $10	;player up prop port 3
+	PL_CH16 = $11	;player up prop port 4
+	PL_CH17 = $12	;player up prop stbd 1
+	PL_CH18 = $13	;player up prop stbd 2
+	PL_CH19 = $14	;player up prop stbd 3
+	PL_CH20 = $15	;player up prop stbd 4
+	PL_CH21 = $16	;player up stern
+	PL_CH22 = $17	;player up mid
+	PL_CH23 = $18	;player up bow
+	PL_CH24 = $19	;player down prop port 1
+	PL_CH25 = $1A	;player down prop port 2
+	PL_CH26 = $1B	;player down prop port 3
+	PL_CH27 = $1C	;player down prop port 4
+	PL_CH28 = $1D	;player down prop stbd 1
+	PL_CH29 = $1E	;player down prop stbd 2
+	PL_CH30 = $1F	;player down prop stbd 3
+	PL_CH31 = $20	;player down prop stbd 4
+	PL_CH32 = $21	;player down stern
+	PL_CH33 = $22	;player down mid
+	PL_CH34 = $23	;player down bow
+	
+	;system palette preferences
+	SYS_BLK = $0F	;preferred black, farthest from nearby grays
+	SYS_WHT = $30	;preferred white, farthest from nearby grays
+
+
+;ROM data
+	.ORG $8000	;nametable initial data
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0	;base nametable
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,RED_CH,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,BLU_CH,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE RED_CH,RED_CH,GRN_CH,GRN_CH,BLU_CH,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00	;base attribute table
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00
+	.BYTE $50,$50,$50,$50,$50,$50,$50,$50
+	.BYTE $55,$55,$55,$55,$55,$55,$55,$55
+	.BYTE $55,$55,$55,$55,$55,$55,$55,$55
+	
+GP_SCR	.BYTE $99,$99,$11,$00,$01,$11,$99,$99	;gameplay screen tile layout (each nibble = 16x16 pixels)
+	.BYTE $99,$91,$00,$00,$00,$00,$11,$19	;(each nibble has 3 bits for pattern, 1 bit for inside wall flag)
+	.BYTE $99,$10,$00,$00,$00,$00,$00,$01	;($0 is reserved for blank space, $8 for bkgd decoration)
+	.BYTE $91,$00,$00,$00,$00,$00,$00,$01
+	.BYTE $99,$11,$10,$00,$01,$00,$00,$01
+	.BYTE $99,$99,$91,$11,$11,$00,$00,$19
+	.BYTE $11,$11,$10,$00,$00,$00,$00,$19
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$19
+	.BYTE $00,$00,$00,$00,$00,$11,$11,$99
+	.BYTE $11,$11,$10,$00,$11,$99,$99,$99
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00	;gameplay screen tile palettes
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00
+	.BYTE $00,$10,$00,$00,$00,$00,$00,$00	;tile pattern numbers
+	
+	.ORG SPR_INIT	;sprite buffer initial data
+	.BYTE $C3,SPZ_CH,%00000000,$E8	;sprite 0
+	.BYTE $EF,0,%00000000,$00	;priority sprites (reserved for flickering)
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $F8,PL_CH1,%00000001,$05	;player sail
+	.BYTE $FC,PL_CH2,%00000001,$F4	;player prop top
+	.BYTE $04,PL_CH6,%00000001,$F4	;player prop bottom
+	.BYTE $00,PL_CH10,%00000001,$FC	;player stern
+	.BYTE $00,PL_CH11,%00000001,$04	;player mid
+	.BYTE $00,PL_CH12,%00000001,$0C	;player bow
+	.BYTE $EF,0,%00000000,$00	;unused sprites (placed offscreen w/ blank transparent pattern)
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+	.BYTE $EF,0,%00000000,$00
+
+
+;program instructions
+	.ORG $C100
+
+;functions
+;rotate player clockwise (put first y byte address in X, number of constituent sprites in Y)
+RCW	LDA PL_Y
+	SEC
+	SBC SPR_ADDR,X
+	STA $00
+	INX
+	LDA SPR_ADDR,X
+	CMP #PL_CH13
+	BCS RCWIF1
+	ADC #$21
+	SEC
+RCWIF1	SBC #$0B
+	STA SPR_ADDR,X
+	INX
+	INX
+	LDA SPR_ADDR,X
+	SEC
+	SBC PL_X
+	DEX
+	DEX
+	DEX
+	CLC
+	ADC PL_Y
+	STA SPR_ADDR,X
+	INX
+	INX
+	INX
+	LDA $00
+	CLC
+	ADC PL_X
+	STA SPR_ADDR,X
+	INX
+	DEY
+	BNE RCW
+	RTS
+
+;rotate player counterclockwise (put first y byte address in X, number of constituent sprites in Y)
+RCC	LDA SPR_ADDR,X
+	SEC
+	SBC PL_Y
+	STA $00
+	INX
+	LDA SPR_ADDR,X
+	CMP #PL_CH24
+	BCC RCCIF1
+	SBC #$21
+	CLC
+RCCIF1	ADC #$0B
+	STA SPR_ADDR,X
+	INX
+	INX
+	LDA PL_X
+	SEC
+	SBC SPR_ADDR,X
+	DEX
+	DEX
+	DEX
+	CLC
+	ADC PL_Y
+	STA SPR_ADDR,X
+	INX
+	INX
+	INX
+	LDA $00
+	CLC
+	ADC PL_X
+	STA SPR_ADDR,X
+	INX
+	DEY
+	BNE RCC
+	RTS
+
+;flip player horizontally (put first attribute byte address in X, number of constituent sprites in Y)
+FPH	LDA #%01000000
+	EOR SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	LDA PL_X
+	ASL A
+	SEC
+	SBC SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	INX
+	INX
+	DEY
+	BNE FPH
+	RTS
+
+;rotate player 180 degrees (put first y byte address in X, number of constituent sprites in Y)
+RHF	LDA PL_Y
+	ASL A
+	SEC
+	SBC SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	LDA SPR_ADDR,X
+	CMP #PL_CH24
+	BCC RHFIF1
+	SBC #$16
+	CLC
+RHFIF1	ADC #$0B
+	STA SPR_ADDR,X
+	INX
+	INX
+	LDA PL_X
+	ASL A
+	SEC
+	SBC SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	DEY
+	BNE RHF
+	RTS
+
+;NMI handling
+NMI	LDA PPUCTRL_B
+	AND #%01111111
+	STA PPUCTRL_B
+	STA $2000	;disable V-Blank NMI
+	LDA PPUMASK_B
+	ORA #%01000000
+	STA PPUMASK_B
+	STA $2001	;enable tint
+	LDA SCROLL_X
+	STA $2005
+	LDA SCROLL_Y
+	STA $2005	;restore scroll
+	
+	LDA #SPR_PG
+	STA $4014	;set OAM
+	
+	;input polling and processing
+	LDA IBR
+	STA PIR		;set previous input register
+	
+	LDA #%00000001
+	STA $4016	;strobe joypad 1
+	STA IBR
+	LSR A
+	STA $4016	;end strobe
+INP	LDA $4016
+	LSR A
+	ROL IBR		;record joypad 1 input
+	BCC INP
+	
+	LDA IBR		;compute input
+	STA $00
+	LDA #$00
+	ROR $00		;compute input right
+	BCC CIL
+	LDA #PL_SPD
+CIL	ROR $00		;compute input left
+	BCC CIH
+	SBC #PL_SPD
+CIH	STA $01		;compute input horizontal
+	LDA #$00
+	ROR $00		;compute input down
+	BCC CIU
+	LDA #PL_SPD
+CIU	ROR $00		;compute input up
+	BCC CIV
+	SBC #PL_SPD
+CIV	STA $02		;compute input vertical
+	
+	LDA $01		;restrict movement to a single cardinal direction
+	BEQ CCM
+	LDA $02
+	BEQ CCM
+	LDX #$01
+	LDY #$35
+	LDA SPR_ADDR,Y
+	CMP #PL_CH23
+	BMI PMH
+	BEQ PMU
+	LDA $02
+	BPL MVC
+	INX
+	BNE MVC
+PMU	LDA $02
+	BMI MVC
+	INX
+	BNE MVC
+PMH	INY
+	LDA SPR_ADDR,Y
+	ASL A
+	EOR $01
+	BMI MVC
+	INX
+MVC	LDA #$00
+	STA $00,X
+	
+CCM	LDA $01		;compute current movement
+	BEQ SK3
+	LDX #$20	;if moving horizontally, compute rotation and movement
+	LDA SPR_ADDR,X
+	CMP #$EF
+	BCC SK1
+	LDA PL_Y	;if not facing horizontal, set the sail sprite data
+	SEC
+	SBC #$08
+	STA SPR_ADDR,X
+	INX
+	INX
+	LDA #%10111111
+	AND SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	LDA PL_X
+	CLC
+	ADC #$05
+	STA SPR_ADDR,X
+	LDX #$2D	;and rotate the remaining sprites so the sub will face right
+	LDA SPR_ADDR,X
+	LDY #5
+	LDX #$24
+	CMP #PL_CH24
+	BCS IF1
+	JSR RCW
+	BEQ SK1
+IF1	JSR RCC
+SK1	LDY #6		;facing horizontal
+	LDX #$22
+	LDA SPR_ADDR,X
+	ASL A
+	EOR $01
+	BPL SK2
+	JSR FPH		;if needed, flip player horizontally
+	LDY #6
+SK2	LDA $01		;move horizontally
+	CLC
+	ADC PL_X
+	STA PL_X
+	LDX #$23
+LP1	LDA $01
+	CLC
+	ADC SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	INX
+	INX
+	INX
+	DEY
+	BNE LP1
+	BEQ ANI
+SK3	LDA $02		;not moving horizontally
+	BEQ ANI
+	LDX #$20	;if moving vertically, compute rotation and movement
+	LDA SPR_ADDR,X
+	CMP #$EF
+	BCS SK5
+	LDA #$EF	;if facing horizontal, hide sail sprite off bottom of screen
+	STA SPR_ADDR,X
+	LDY #5
+	LDX #$26
+	LDA SPR_ADDR,X
+	ASL A
+	BPL SK4
+	JSR FPH		;and if needed, flip player horizontally so the sub faces right
+	LDY #5
+SK4	LDX #$24	;and rotate the remaining sprites so the sub faces the correct direction
+	LDA $02
+	BPL IF2
+	JSR RCC
+	BEQ SK6
+IF2	JSR RCW
+	BEQ SK6
+SK5	LDX #$2D	;already facing vertical
+	LDA SPR_ADDR,X
+	LDY #5
+	LDX #$24
+	SEC
+	SBC #PL_CH24
+	EOR $02
+	BPL SK6
+	JSR RHF		;if needed, rotate player 180 degrees
+SK6	LDY #5		;move vertically
+	LDA $02
+	CLC
+	ADC PL_Y
+	STA PL_Y
+	LDX #$24
+LP2	LDA $02
+	CLC
+	ADC SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	INX
+	INX
+	INX
+	DEY
+	BNE LP2
+	
+ANI	LDA #%00000011	;player animation
+	BIT ATR
+	BNE ATI
+	LDX #$25
+	INC SPR_ADDR,X
+	INX
+	INX
+	INX
+	INX
+	INC SPR_ADDR,X
+	LDA #%00001100
+	BIT ATR
+	BNE ATI
+	LDX #$25
+	LDA SPR_ADDR,X
+	SEC
+	SBC #$04
+	STA SPR_ADDR,X
+	INX
+	INX
+	INX
+	INX
+	LDA SPR_ADDR,X
+	SEC
+	SBC #$04
+	STA SPR_ADDR,X
+	
+ATI	INC ATR		;increment animation timer
+	
+SZC	LDA $2002	;wait for sprite 0 flag clear
+	AND #%01000000
+	BNE SZC
+SZH	LDA $2002	;wait for sprite 0 hit
+	AND #%01000000
+	BEQ SZH
+	LDA PPUMASK_B	;8-17 CPU cycles (24-51 pixels) have already elapsed since sprite 0 hit.
+	AND #%10111111	;19.3-28.3 CPU cycles (58-85 pixels) remain until end of H-Blank
+	STA PPUMASK_B
+	STA $2001
+	LDA #$00
+	STA $2005
+	LDA SCROLL_Y	;H-Blank ends during this instruction at the earliest
+	STA $2005	;end of H-Blank code
+	LDA PPUCTRL_B
+	ORA #%10000000
+	STA PPUCTRL_B
+	STA $2000	;enable V-Blank NMI
+	RTI
+
+;reset handling
+RES	SEI		;disable interrupts
+	CLD		;disable BCD (probably unnecessary, but included just in case)
+	LDA #%00001000
+	STA $2000	;initialize PPU control register 1 (V-blank NMI disabled)
+	LDA #%01000010
+	STA $2001	;initialize PPU control register 2 (rendering disabled)
+	LDX #$FF
+	TXS		;initialize SP
+	LDA $2002	;reset VRAM address latch
+	
+	LDA #%00000000
+	STA IBR		;initialize input buffer register
+	STA PIR		;initialize previous input register
+	LDA #1
+	STA ATR		;initialize animation timer
+	LDA #$3C
+	STA PL_X	;initialize player x
+	LDA #$43
+	STA PL_Y	;initialize player y
+	
+	;palette initialization
+	LDA #$3F	;image palette 0
+	STA $2006
+	LDA #$00
+	STA $2006
+	LDA #SYS_BLK
+	STA $2007
+	LDA #$16
+	STA $2007
+	LDA #$2A
+	STA $2007
+	LDA #$11
+	STA $2007
+	LDA #$3F	;sprite palette 0
+	STA $2006
+	LDA #$11
+	STA $2006
+	LDA #$16
+	STA $2007
+	LDA #$2A
+	STA $2007
+	LDA #$11
+	STA $2007
+	LDA $2007	;sprite palette 1
+	LDA #$10
+	STA $2007
+	LDA #SYS_WHT
+	STA $2007
+	LDA #$00
+	STA $2007
+	LDA #$3F	;go to safe address to exit palette memory from
+	STA $2006
+	LDA #$00
+	STA $2006
+	
+	;nametable initialization
+	LDA #$00
+	STA $00
+	LDA #$80
+	STA $01
+	LDY #$00
+	LDA #$20
+	STA $2006
+	LDA #$00
+	STA $2006
+NTI	LDA ($0000),Y
+	STA $2007
+	INY
+	BNE NTI		;loop until Y overflows back to 0
+	INC $01
+	LDA $01
+	CMP #$84
+	BNE NTI		;loop until address $8400 (start of second virtual nametable) reached
+	
+	;sprite buffer initialization
+	LDX #$00
+SBI	LDA SPR_INIT,X
+	STA SPR_ADDR,X
+	INX
+	BNE SBI		;loop until X overflows back to 0
+	LDY #6
+	LDX #$20
+PPI	LDA PL_Y	;correct the player sprite positions
+	CLC
+	ADC SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	INX
+	INX
+	LDA PL_X
+	CLC
+	ADC SPR_ADDR,X
+	STA SPR_ADDR,X
+	INX
+	DEY
+	BNE PPI
+	
+	LDA #$00
+	STA SCROLL_X	;initialize x scroll buffer
+	STA $2005	;initialize x scroll
+	STA SCROLL_Y	;initialize y scroll buffer
+	STA $2005	;initialize y scroll
+	STA $2003	;initialize OAM address
+	LDA #SPR_PG
+	STA $4014	;initialize OAM
+	LDA #%10001000
+	STA PPUCTRL_B	;initialize PPU control register buffer
+	STA $2000	;enable V-Blank NMI and re-initialize base nametable
+	LDA #%01011000
+	STA PPUMASK_B	;initialize PPU mask register buffer
+	STA $2001	;enable rendering
+	SEC
+INF	BCS INF		;infinite loop
+	
+
+;interrupt handling
+IRQ	RTI
+
+
+;system vectors
+	.ORG $FFFA
+	.WORD NMI
+	.WORD RES
+	.WORD IRQ
