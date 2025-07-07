@@ -1,0 +1,237 @@
+/* General setup */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0 auto;
+  min-width: 1000px;
+  max-width: 1400px;
+}
+
+/* Layout */
+
+section {
+  float: left;
+  width: 50%;
+}
+
+aside {
+  float: left;
+  width: 30%;
+}
+
+nav {
+  float: left;
+  width: 20%;
+}
+
+footer {
+  clear: both;
+}
+
+header, section, aside, nav, footer {
+  padding: 20px;
+}
+
+/* header and footer */
+
+header, footer {
+  border-top: 5px solid #a66;
+  border-bottom: 5px solid #a66;
+}
+
+/* WRITE YOUR CODE BELOW HERE */
+
+/* fonts */
+
+@font-face {
+  font-family: "Liberation Serif";
+  src: url(fonts/LiberationSerif-Regular.ttf);
+  src:
+    local("Liberation Serif"),
+    local("LiberationSerif"),
+    url(fonts/LiberationSerif-Regular.ttf) format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Serif";
+  src: url(fonts/LiberationSerif-Bold.ttf);
+  src:
+    local("Liberation Serif Bold"),
+    local("LiberationSerif-Bold"),
+    url(fonts/LiberationSerif-Bold.ttf) format("truetype");
+  font-weight: bold;
+}
+
+@font-face {
+  font-family: "Liberation Serif";
+  src: url(fonts/LiberationSerif-Italic.ttf);
+  src:
+    local("Liberation Serif Italic"),
+    local("LiberationSerif-Italic"),
+    url(fonts/LiberationSerif-Italic.ttf) format("truetype");
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "Liberation Serif";
+  src: url(fonts/LiberationSerif-BoldItalic.ttf);
+  src:
+    local("Liberation Serif Bold Italic"),
+    local("LiberationSerif-BoldItalic"),
+    url(fonts/LiberationSerif-BoldItalic.ttf) format("truetype");
+  font-style: italic;
+  font-weight: bold;
+}
+
+@font-face {
+  font-family: "Liberation Sans";
+  src: url(fonts/LiberationSans-Regular.ttf);
+  src:
+    local("Liberation Sans"),
+    local("LiberationSans"),
+    url(fonts/LiberationSans-Regular.ttf) format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Sans";
+  src: url(fonts/LiberationSans-Bold.ttf);
+  src:
+    local("Liberation Sans Bold"),
+    local("LiberationSans-Bold"),
+    url(fonts/LiberationSans-Bold.ttf) format("truetype");
+  font-weight: bold;
+}
+
+@font-face {
+  font-family: "Liberation Sans";
+  src: url(fonts/LiberationSans-Italic.ttf);
+  src:
+    local("Liberation Sans Italic"),
+    local("LiberationSans-Italic"),
+    url(fonts/LiberationSans-Italic.ttf) format("truetype");
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "Liberation Sans";
+  src: url(fonts/LiberationSans-BoldItalic.ttf);
+  src:
+    local("Liberation Sans Bold Italic"),
+    local("LiberationSans-BoldItalic"),
+    url(fonts/LiberationSans-BoldItalic.ttf) format("truetype");
+  font-style: italic;
+  font-weight: bold;
+}
+
+* {
+  font-family: "Liberation Serif", "Times New Roman", Times, serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Liberation Sans", Helvetica, Arial, sans-serif;
+  letter-spacing: 0.1em;
+}
+
+html {
+  font-size:10px;
+}
+
+h1 {
+  font-size: 6lh;
+  text-align: center;
+}
+
+h2 {
+  font-size: 5lh;
+}
+
+h3 {
+  font-size: 4lh;
+}
+
+h4 {
+  font-size: 3lh;
+}
+
+h5 {
+  font-size: 2lh;
+}
+
+h6 {
+  font-size: 1lh;
+}
+
+p, li {
+  font-size: 1lh;
+  line-height: 150%;
+  letter-spacing: 0.05em;
+  word-spacing: 0.1em;
+}
+
+section :is(h1, h2, h3, h4, h5, h6)+p {
+  text-indent: 4em;
+}
+
+a {
+  text-decoration: underline;
+}
+
+:link {
+  color: #d53333;
+}
+
+:visited {
+  color: #a66;
+}
+
+:focus, a:hover {
+  text-decoration: none;
+}
+
+:focus {
+  color: #1a7878;
+  outline: none;
+}
+
+a:hover {
+  color: red;
+}
+
+a:active {
+  color: #f30;
+  outline: 1px solid;
+}
+
+a:is([href^="https://"], [href^="http://"]) {
+  padding-right: 1em;
+  background-size: 0.75em;
+  background-position: center right;
+  background-image: url(external-link-52.png);
+  background-repeat: no-repeat;
+}
+
+p {
+  margin-top: 1.12em;
+  margin-bottom 1.12em;
+}
+
+ul, ol {
+  margin-top: 1.12em;
+  margin-bottom: 1.12em;
+}
+
+ul {
+  list-style-type: circle;
+}
+
+nav {
+  border-left: 3px solid #a66;
+}
+
+nav li {
+  font-size: 3lh;
+  line-height: 200%;
+}

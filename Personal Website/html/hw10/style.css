@@ -1,0 +1,41 @@
+form>* {
+  margin: 1em 0;
+}
+
+fieldset>* {
+  display: block;
+}
+
+label:not(:has(> input:is([type="checkbox"], [type="radio"])))>* {
+  display: block;
+}
+
+button {
+  font-size: 100%;
+}
+
+input:is(:not([type]), [type="text"], [type="email"], [type="password"]) {
+  border-style: solid;
+  border-color: gray;
+  border-radius: 2px;
+}
+
+input:is(:not([type]), [type="text"], [type="email"]):disabled {
+  border-color: lightgray
+}
+
+input:is(:not([type]), [type="text"], [type="email"]):valid {
+  border-color: limegreen;
+}
+
+input:is(:not([type]), [type="text"], [type="email"]):invalid {
+  border-color: red;
+  border-radius: 0;
+  outline: solid red;
+}
+
+.spacer {
+  min-height: 1px;
+  padding: 0;
+  border-style: none;
+}

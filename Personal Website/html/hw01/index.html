@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="author" content="Gavin Wilson"/>
+    <meta name="description" content="A webpage about Nintendo Entertainment System programming"/>
+    <meta name="keywords" content="NES, Famicom, 8-bit, programming, games"/>
+    <title>NES Programming</title>
+  </head>
+  <body>
+    <h1>NES Programming</h1>
+    <p>I find the intricacies of low-level programming deeply fascinating. As such, I have spent a fair amount of time learning about the instruction set architectures of 8-bit processors, which have a rich history of programming with hand-written assembly code. However, when learning about programming topics, one can only get so far without actual hands-on experience. Unfortunately, 8-bit processors are mostly obsolete in today's world, so in order to find practical use cases with which to practice, one must look to the <b>contemporary</b> applications of 8-bit processors during their hayday. Among the most notable such applications has been their use in 3rd-generation home video game consoles, and among the most notable such consoles is the Nintendo Entertainment System.</p>
+    <p>On this page, I discuss the architecture of the NES—including its variants, such as the Famicom and Vs. System—and provide general information relevant to programming it.</p>
+    <table>
+      <tr>
+        <th><u>Table of Contents</u></th>
+      </tr>
+      <tr>
+        <td>
+          <ol>
+            <li>
+              <a href="#hardware">Hardware</a>
+              <ol>
+                <li>
+                  <a href="#internal">Internal</a>
+                </li>
+                <li>
+                  <a href="#cartridge">Cartridge</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="#memory_maps">Memory Maps</a>
+            </li>
+            <li>
+              <a href="#resources">Resources</a>
+            </li>
+          </ol>
+        </td>
+      </tr>
+    </table>
+    <h2 id="hardware">Hardware</h2>
+    <h3 id="internal">Internal</h3>
+    <p>The Ricoh 2A03 and 2A07 serve as the CPU for the NES's NTSC and PAL versions respectively, both of which use <a href="https://www.wikipedia.org/wiki/MOS_Technology_6502">6502 instruction set architecture</a>. The Ricoh 2C02 and 2C07 meanwhile serve as the NTSC and PAL versions of its PPU (picture processing unit).<br/>Only the CPU can be programmed directly by conventional means, while the PPU's behavior is largely automatic.</p>
+    <p>The CPU uses a 16-bit address bus to access 2kiB of internal RAM, along with a wide range of potential other things. The PPU uses a 14-bit address bus to access a number of things, including 2kiB of internal VRAM and 25B of RAM dedicated to color palette information, all of which the CPU can access indirectly using memory-mapped registers in its own address space. The PPU additionally has 256B of on-die OAM (object attribute memory) dedicated to storing sprite data, which the CPU can also access.</p>
+    <p>The CPU can also use memory-mapped registers in its address space to access a number of other hardware components, including an integrated APU (audio processing unit), the console's controllers, and the PPU.</p>
+    <h3 id="cartridge">Cartridge</h3>
+    <p>The contents of an NES cartridge can vary wildly, in terms of both software and hardware. All of them contain a mapper of some sort, which allows their contents to be accessed through memory addressing. The system's memory addressing scheme assumes a given cartridge will have 32kiB of PRG ROM (program ROM) for storing code and other program data, and 8kiB of CHR ROM (character ROM) for storing sprite and tile shapes; however, certain mappers can map more or less ROM to this address space. They can also map RAM to this address space, thus making it writable instead of read-only. They can even provide NVRAM, additional work RAM, and additional VRAM at dedicated locations, and map virtually any device to a PRG ROM address.</p>
+    <p>Officially-published NES games typically only used this functionality for memory expansions and features such as ROM bank switching or hardware interrupt generators. Homebrewers, on the other hand, have used it to do things like provide additional processors, or even outsource everything but picture processing to an entire self-contained computer placed on a custom cartridge.</p>
+    <h2 id="memory_maps">Memory Maps</h2>
+    <p>The CPU's address space is organized as follows:</p>
+    <ul>
+      <li>$0000-$00FF: Zero page. 6502 ISA addresses memory in 256B pages, with the first being called the zero page and reserved for a quicker addressing method.</li>
+      <li>$0100-$01FF: Stack. 6502 ISA reserves the second 256B page for a system stack used by various instructions. The stack's highest address is its base.</li>
+      <li>$0200-$07FF: General-purpose RAM. These addresses are not reserved, and can be used by the CPU as the programmer sees fit.</li>
+      <li>$0800-$1FFF: Mirrors $0000-$07FF. Since bits 11-12 of the CPU's address bus are not normally connected to physical RAM, these addresses simply reflect their lower-order bits, thus "mirroring" lower addresses. However, if a mapper makes use of those address bits, these addresses can instead correspond to extra RAM on the cartridge.</li>
+      <li>$2000-$401F: I/O registers. These addresses do not access memory; rather, they are used to interface with the system's various I/O devices through memory-mapped registers. Addresses $2008-$3FFF normally mirror $2000-$2007.</li>
+      <li>$4020-$5FFF: Expansion ROM. These addresses are reserved for use of the NES's expansion port, which was never officially used.</li>
+      <li>$6000-$7FFF: NVRAM. Reserved for non-volatile memory on the cartridge, typically used for storing save data.</li>
+      <li>$8000-$FFFF: PRG ROM. Reserved for program ROM, typically divided into banks. The most standard configuration is two 16kiB banks, but different mappers often deviate from this.</li>
+    </ul>
+    <br/>
+    <p>The PPU's address space is organized as follows:</p>
+    <ul>
+      <li>$0000-1FFF: CHR ROM. Reserved for character ROM, typically divided into banks. The most standard configuration is two 4kiB banks, but different mappers often deviate from this.
+        <ul>
+          <li>$0000-$0FFF: Pattern table 0. One of two tables in CHR ROM which can store either tile or sprite shapes.</li>
+          <li>$1000-$1FFF: Pattern table 1. The other of two tables in CHR ROM which can store either tile or sprite shapes.</li>
+        </ul>
+      </li>
+      <li>$2000-$2FFF: VRAM. Stores the tile layout to be displayed, along with the color palettes to use for each 2x2 group of tiles. Four screens' worth of tile data are stored in order to facilitate scrolling. Depending on the cartridge configuration, certain screens may mirror certain others. In single-screen mirroring, the top-left screen is mirrored by all others. In horizontal mirroring, each of the right two screens mirrors the one to its left, thus enabling vertical scrolling. In vertical mirroring, each of the lower two screens mirrors the one above it, thus enabling horizontal scrolling. In four-screen mirroring, which is not possible without 2kiB of additional VRAM on the cartridge, none of the four screens mirror each other, thus enabling vertical, horizontal, and diagonal scrolling.
+        <ul>
+          <li>$2000-$23BF: Name table 0. Stores the tile layout for the upper-left screen.</li>
+          <li>$23C0-$23FF: Attribute table 0. Stores which color palettes are used by the tiles on the upper-left screen.</li>
+          <li>$2400-$27BF: Name table 1. Stores the tile layout for the upper-right screen.</li>
+          <li>$27C0-$27FF: Attribute table 1. Stores which color palettes are used by the tiles on the upper-right screen.</li>
+          <li>$2800-$2BBF: Name table 2. Stores the tile layout for the lower-left screen.</li>
+          <li>$2BC0-$2BFF: Attribute table 2. Stores which color palettes are used by the tiles on the lower-left screen.</li>
+          <li>$2C00-$2FBF: Name table 3. Stores the tile layout for the lower-right screen.</li>
+          <li>$2FC0-$2FFF: Attribute table 3. Stores which color palettes are used by the tiles on the lower-right screen.</li>
+        </ul>
+      </li>
+      <li>$3000-$3EFF: Mirrors $2000-$2EFF. Normally unused extra VRAM addresses.</li>
+      <li>$3F00-$3F0F: Image palettes. Every 4 addresses constitutes a different color palette for use by image tiles. The first address of the first palette stores the global background color, with the first address of each other palette mirroring it. The remaining three addresses of each palette each store a color in the palette. Colors are stored as 1B indices to the system's global color palette.</li>
+      <li>$3F10-$3F1F: Sprite palettes. The sprite palettes are structure in the same way as the image palettes, except that the first address in each sprite palette mirrors the first address in the first image palette and is used for transparent sprite pixels.</li>
+      <li>$3F20-$3FFF: Mirrors $3F00-$3F1F. Unused extra palette addresses.</li>
+      <li>$4000-$FFFF: Mirrors $0000-$3FFF. These addresses are beyond the 14-bit bus width of the PPU's address space, and only reflect their lower-order bits.</li>
+    </ul>
+    <br/>
+    <p>The PPU's OAM dedicates 4B to each sprite, making for a maximum sprite count of 64. The first byte of a given sprite's data stores its y coordinate; the second byte stores the pattern table index of its shape; the third byte stores whether it is vertically flipped, whether it is horizontally flipped, whether it should appear in front of or behind tiles, and which sprite palette it uses; and the fourth byte stores its x coordinate.</p>
+    <h2 id="resources">Resources</h2>
+    <ul>
+      <li>
+        <a href="https://www.nesdev.org/wiki/Nesdev_Wiki">Nesdev Wiki</a>
+      </li>
+      <li>
+        <a href="https://www.nesdev.org/NESDoc.pdf">NES Documentation</a>
+      </li>
+    </ul>
+  </body>
+</html>

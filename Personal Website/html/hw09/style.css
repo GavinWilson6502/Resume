@@ -1,0 +1,29 @@
+body {
+  background-color: lightgray;
+}
+
+div {
+  margin-left: 10%;
+  border-width: 1px;
+  border-style: solid;
+  padding: 1ex 1ex 0.75ex;
+}
+
+#data {
+  border-color: blue;
+}
+
+#result {
+  border-color: green;
+}
+
+form {
+  display: block;
+}
+
+button {
+  font-size: 1.5em;
+  margin-bottom: 3.5ex;
+  margin-left: 10%;
+  padding: 1ex 0.75em 0.5ex;
+}

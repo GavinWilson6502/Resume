@@ -1,0 +1,24 @@
+#board {
+  margin: auto;
+  width: 75%;
+  overflow: hidden;
+}
+
+#board div {
+  margin-top: 1px;
+  margin-bottom: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#board span {
+  display: inline-block;
+  margin-left: 1px;
+  margin-right: 1px;
+  overflow: hidden;
+}
+
+#board img {
+  position: relative;
+  font-size: revert;
+}

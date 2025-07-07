@@ -1,0 +1,29 @@
+.banner {
+  width: 100%;
+  height: 8em;
+  background-color: red;
+  color: white;
+  align-content: center;
+}
+
+.banner>h1 {
+  margin-left: 1em;
+  margin-right: 1em;
+}
+
+.logo {
+  width: auto;
+  height: 12em;
+}
+
+ul {
+  list-style-type: none;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th, td {
+  border-style: solid;
+}
